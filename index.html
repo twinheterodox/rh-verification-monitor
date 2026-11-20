@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#0a0e14">
+  <title>RH / GRH verification · Proof Monitor</title>
+  <link rel="icon" href="./mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./terminal.css">
+  <script src="./terminal.js" defer></script>
+</head>
+<body>
+  <header class="mast">
+    <div class="shell navbar">
+      <a class="brand" href="#overview" aria-label="Proof Monitor overview"><span class="prompt" aria-hidden="true">&gt;_</span> PROOF MONITOR</a>
+      <nav aria-label="Dashboard"><a href="#workers">Workers</a><a href="#checks">Checks</a></nav>
+      <span class="feed" id="feed" role="status"><i></i><span>Connecting</span></span>
+    </div>
+  </header>
+  <main class="shell" id="overview">
+    <div class="intro">
+      <div><h1>RH <span>/</span> GRH verification</h1>
+      <p>An independent Lean check of Alpöge’s formalization of the Riemann hypothesis and its Dirichlet generalization.</p></div>
+      <div class="timestamp"><span>LAST SAMPLE <b>UTC</b></span><time id="stamp">—</time></div>
+    </div>
+    <noscript>This monitor uses JavaScript to display live observations. Its current data is also available in the JSON feed below.</noscript>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <section class="hero frame" aria-label="Compilation overview">
+      <div class="summary">
+        <div class="panel-title"><span class="sig green" aria-hidden="true">//</span><h2>Compilation</h2></div>
+        <div class="metric"><strong id="percent">—</strong><span>%</span></div>
+        <p class="fraction"><b id="completed">—</b> / <span id="total">—</span> distinct modules</p>
+        <div class="progress-strip" id="progressbar" role="progressbar" aria-label="Modules compiled" aria-valuemin="0" aria-valuemax="100"><span id="progress-fg"></span><span id="progress-bg"></span></div>
+        <div class="stat-pair"><div><span class="label">LATEST RATE</span><strong id="rate">—</strong><small>modules / min</small></div>
+          <div><span class="label">CACHE REUSES</span><strong id="restores">—</strong><small>local builds avoided</small></div></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-head"><div class="panel-title"><span class="sig cyan" aria-hidden="true">~/</span><h2>Build history</h2></div>
+          <div class="switch" role="group" aria-label="Chart metric"><button type="button" data-mode="modules" aria-pressed="true">Modules</button><button type="button" data-mode="rate" aria-pressed="false">Rate</button></div></div>
+        <div class="plot-label"><span id="chart-unit">DISTINCT MODULES</span><span id="chart-latest">—</span></div>
+        <div class="plot" id="plot" role="img" aria-label="Build history chart"><pre id="chart">Waiting for a sample…</pre></div>
+        <div class="chart-times"><span id="first-time">—</span><span>UTC</span><span id="last-time">—</span></div>
+      </div>
+    </section>
+    <section id="workers" class="subsection" aria-labelledby="workers-title">
+      <div class="section-head"><h2 id="workers-title">Worker pool</h2><span class="section-detail" id="online">—</span></div>
+      <div class="worker-grid" id="worker-grid"></div>
+      <p class="footnote">Local module totals include shared work. The compilation total counts each module once across the pool.</p>
+    </section>
+    <section class="bottom-grid">
+      <div class="frame lower" id="checks">
+        <div class="panel-title"><span class="sig magenta" aria-hidden="true">[ ]</span><h2>Verification stages</h2></div>
+        <ol class="stages" id="stages"></ol>
+        <p class="footnote" id="phase-note">Compilation is followed by proof export and independent kernel checks.</p>
+      </div>
+      <div class="frame lower">
+        <div class="panel-title"><span class="sig cyan" aria-hidden="true">&gt;_</span><h2>Sample log</h2></div>
+        <table><caption class="sr-only">Recent build samples</caption><thead><tr><th scope="col">UTC</th><th scope="col">Modules</th><th scope="col">Gain</th></tr></thead><tbody id="sample-log"></tbody></table>
+        <p class="footnote" id="estimate"></p>
+      </div>
+    </section>
+    <details class="evidence frame"><summary>Run evidence <span aria-hidden="true">+</span></summary>
+      <div class="detail-body"><p>The submitted archive and clean challenge statements were fingerprinted before compilation. The proof builds with Lean 4.33.1 and the judge runs Lean 4.36.0.</p>
+        <dl><dt>Source archive · SHA-256</dt><dd id="archive">—</dd><dt>Clean challenge · SHA-256</dt><dd id="challenge">—</dd></dl>
+        <a href="https://alpo.ge/remark.pdf">Author’s announcement ↗</a><a href="https://github.com/Deicyde/riemann-hypothesis/blob/main/verification/NOTES.md">Verification setup ↗</a></div>
+    </details>
+  </main>
+  <footer class="shell"><span>PROOF MONITOR <span class="dim">/</span> LEAN 4</span><a id="feed-link" href="https://raw.githubusercontent.com/twinheterodox/rh-verification-monitor/telemetry/status.json">JSON feed ↗</a></footer>
+</body>
+</html>
