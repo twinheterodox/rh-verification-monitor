@@ -13,6 +13,7 @@ const feedUrl = new URL(el("feed-link").href);
 const externalFeed = feedUrl.origin !== location.origin;
 const apiFeed = el("feed-link").dataset.api;
 let apiWindow = -1;
+let minuteLookup = -1;
 let eta = null;
 
 function node(tag, text, cls) {
@@ -241,6 +242,7 @@ function render(s) {
   el("stamp").textContent = utc(s.sample);
   el("stamp").dateTime = s.sample;
   el("stamp").title = s.sample;
+  el("cadence").textContent = s.intervalSeconds === 60 ? "One-minute samples" : Math.round(s.intervalSeconds / 60) + "-minute samples";
   el("percent").textContent = percent.toFixed(2);
   el("completed").textContent = fmt(s.modules);
   el("total").textContent = fmt(s.total);
@@ -277,9 +279,21 @@ async function readFeed(url, headers = {}) {
 
 async function fetchLatest() {
   if (!externalFeed) return readFeed(feedUrl);
-  const now = Date.now(), interval = (observation?.intervalSeconds || 240) * 1000;
-  // Allow the monitor and outbound publisher to finish before requesting each observation.
-  const window = Math.floor((now - 65000) / interval);
+  const now = Date.now();
+  // Each observation has a new file name. A cached response cannot hide a later minute.
+  const slot = Math.floor((now - 40000) / 60000);
+  if (observation && !observation.partial && Math.floor(Date.parse(observation.sample) / 60000) >= slot) return observation;
+  if (minuteLookup !== slot) {
+    minuteLookup = slot;
+    const iso = new Date(slot * 60000).toISOString();
+    const day = iso.slice(0,10).replaceAll("-", ""), minute = iso.slice(11,16).replace(":", "");
+    try {
+      const sample = await readFeed(new URL("samples/" + day + "/" + minute + ".json", feedUrl));
+      if (Math.floor(Date.parse(sample.sample) / 60000) === slot) return sample;
+    } catch { /* Fall back to the last available observation if a sample is delayed. */ }
+  }
+  // The normal minute feed is independent of anonymous GitHub API quotas.
+  const window = Math.floor(now / 300000);
   if (apiFeed && apiWindow !== window) {
     apiWindow = window;
     try {
@@ -288,7 +302,6 @@ async function fetchLatest() {
       return await readFeed(api, {Accept:"application/vnd.github.raw+json"});
     } catch { /* The public raw copy also works if an anonymous API limit is reached. */ }
   }
-  if (observation && Date.parse(observation.sample) >= window * interval) return observation;
   const url = new URL(feedUrl);
   url.searchParams.set("minute", String(Math.floor(now / 60000)));
   return readFeed(url);
@@ -300,7 +313,7 @@ async function refresh() {
   try {
     const s = await fetchLatest();
     unavailable = false;
-    if (!observation || Date.parse(s.sample) >= Date.parse(observation.sample)) {
+    if (s !== observation && (!observation || Date.parse(s.sample) >= Date.parse(observation.sample))) {
       observation = s;
       render(s);
     }
@@ -324,4 +337,4 @@ new ResizeObserver(() => { if (observation) progressStrip(100 * observation.modu
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 refresh();
 setInterval(stageClocks, 1000);
-setInterval(refresh, externalFeed ? 30000 : 15000);
+setInterval(refresh, 15000);
