@@ -11,6 +11,9 @@ let unavailable = false;
 let requestPending = false;
 const feedUrl = new URL(el("feed-link").href);
 const externalFeed = feedUrl.origin !== location.origin;
+const apiFeed = el("feed-link").dataset.api;
+let apiWindow = -1;
+let eta = null;
 
 function node(tag, text, cls) {
   const element = document.createElement(tag);
@@ -179,16 +182,58 @@ function sampleLog(s) {
     rows.push(row);
   }
   el("sample-log").replaceChildren(...rows);
-  const last = s.history.at(-1), now = Date.parse(last.time);
-  const window = s.history.filter(p => Date.parse(p.time) >= now - 30 * 60000);
-  const first = window[0], elapsed = now - Date.parse(first.time);
-  let eta = "";
-  if (s.stages[0] === "active" && !s.partial && elapsed >= 16 * 60000 && last.modules > first.modules &&
-      window.every((p,i) => p.coverage === last.coverage && (!i || p.rate !== null))) {
-    const minutes = Math.ceil(elapsed / 60000 * (s.total - s.modules) / (last.modules - first.modules));
-    eta = "Estimated compilation remaining at the recent pace: " + Math.floor(minutes / 60) + "h " + minutes % 60 + "m. Kernel checks follow.";
+}
+
+function compilationEstimate(s) {
+  if (s.stages[0] !== "active" || s.partial || s.modules >= s.total) return null;
+  const last = s.history.at(-1), asOf = Date.parse(last.time);
+  const recent = s.history.filter(p => Date.parse(p.time) >= asOf - 30 * 60000);
+  const elapsed = asOf - Date.parse(recent[0].time), gain = last.modules - recent[0].modules;
+  if (elapsed < 16 * 60000 || gain <= 0 || recent.some((p,i) => p.coverage !== last.coverage || (i && p.rate === null))) return null;
+  return {finish: asOf + elapsed * (s.total - s.modules) / gain, window: Math.round(elapsed / 60000)};
+}
+
+function stopwatch(start, end) {
+  if (!start || !Number.isFinite(end)) return "—";
+  const seconds = Math.max(0, Math.floor((end - Date.parse(start)) / 1000));
+  return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+    .map(v => String(v).padStart(2, "0")).join(":");
+}
+
+const utcFinish = new Intl.DateTimeFormat("en-GB", {day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit", hourCycle:"h23", timeZone:"UTC"});
+function stageClocks() {
+  const s = observation;
+  if (!s) return;
+  const timing = s.timing || {};
+  const now = Date.now(), sample = Date.parse(timing.asOf || s.sample);
+  const delayed = unavailable || s.partial || now - sample > 2.25 * s.intervalSeconds * 1000;
+  const stopped = Boolean(timing.ended) || s.stages.some(x => x === "inspect" || x === "deferred") || s.complete;
+  const end = timing.ended ? Date.parse(timing.ended) : delayed || stopped ? sample : now;
+  const active = s.stages.indexOf("active");
+  el("clock-stage").textContent = active >= 0 ? ["Compilation","Proof export","Core replay","Additional checks"][active] : s.headline;
+  el("clock-elapsed").textContent = stopwatch(timing.stageStarted,end);
+  el("clock-run").textContent = stopwatch(timing.runStarted,end);
+  const finish = el("clock-finish"), basis = el("clock-basis");
+  finish.removeAttribute("title");
+  if (stopped) {
+    finish.textContent = s.complete ? "Finished" : "—";
+    basis.textContent = timing.ended ? utc(timing.ended) + " UTC · last stage update" : "";
+  } else if (delayed) {
+    finish.textContent = "Awaiting sample";
+    basis.textContent = "Clocks held at the last observation.";
+  } else if (active === 0 && s.modules >= s.total) {
+    finish.textContent = "Finalizing";
+    basis.textContent = "All module files are present.";
+  } else if (active === 0 && eta && eta.finish > now) {
+    const minutes = Math.ceil((eta.finish - now) / 60000);
+    const minute = Math.round(eta.finish / 60000) * 60000;
+    finish.textContent = utcFinish.format(minute);
+    finish.title = new Date(minute).toLocaleString(undefined, {dateStyle:"medium", timeStyle:"short"}) + " in your time zone";
+    basis.textContent = "~" + Math.floor(minutes / 60) + "h " + minutes % 60 + "m left · " + eta.window + "-min pace";
+  } else {
+    finish.textContent = active === 0 ? "Estimating…" : "No estimate yet";
+    basis.textContent = active === 0 ? "Awaiting a measurable build rate." : "This stage has no measured work total.";
   }
-  el("estimate").textContent = eta;
 }
 
 function render(s) {
@@ -205,7 +250,8 @@ function render(s) {
   el("restores").textContent = hits.every(Number.isFinite) ? fmt(hits.reduce((a,b) => a + b, 0)) : "—";
   el("archive").textContent = s.archiveSha256 || "Awaiting matching receipts";
   el("challenge").textContent = s.challengeSha256 || "Awaiting receipt";
-  workers(s); chart(s); stages(s); sampleLog(s);
+  eta = compilationEstimate(s);
+  workers(s); chart(s); stages(s); sampleLog(s); stageClocks();
 }
 
 function progressStrip(percent) {
@@ -221,19 +267,43 @@ function progressStrip(percent) {
   bar.setAttribute("aria-valuenow", percent.toFixed(2));
 }
 
+async function readFeed(url, headers = {}) {
+  const res = await fetch(url, {headers, cache:"no-store", credentials:"omit", referrerPolicy:"no-referrer", signal:AbortSignal.timeout(10000)});
+  if (!res.ok) throw new Error("Feed unavailable");
+  const s = await res.json();
+  if (!s.history?.length || !s.total) throw new Error("Incomplete sample");
+  return s;
+}
+
+async function fetchLatest() {
+  if (!externalFeed) return readFeed(feedUrl);
+  const now = Date.now(), interval = (observation?.intervalSeconds || 240) * 1000;
+  // Allow the monitor and outbound publisher to finish before requesting each observation.
+  const window = Math.floor((now - 65000) / interval);
+  if (apiFeed && apiWindow !== window) {
+    apiWindow = window;
+    try {
+      const api = new URL(apiFeed);
+      api.searchParams.set("observation", String(window));
+      return await readFeed(api, {Accept:"application/vnd.github.raw+json"});
+    } catch { /* The public raw copy also works if an anonymous API limit is reached. */ }
+  }
+  if (observation && Date.parse(observation.sample) >= window * interval) return observation;
+  const url = new URL(feedUrl);
+  url.searchParams.set("minute", String(Math.floor(now / 60000)));
+  return readFeed(url);
+}
+
 async function refresh() {
   if (requestPending) return;
   requestPending = true;
   try {
-    const url = new URL(feedUrl);
-    if (externalFeed) url.searchParams.set("minute", String(Math.floor(Date.now() / 60000)));
-    const res = await fetch(url, {cache:"no-store", credentials:"omit", referrerPolicy:"no-referrer", signal:AbortSignal.timeout(10000)});
-    if (!res.ok) throw new Error("Feed unavailable");
-    const s = await res.json();
-    if (!s.history?.length || !s.total) throw new Error("Incomplete sample");
-    observation = s;
+    const s = await fetchLatest();
     unavailable = false;
-    render(s);
+    if (!observation || Date.parse(s.sample) >= Date.parse(observation.sample)) {
+      observation = s;
+      render(s);
+    }
   } catch {
     unavailable = true;
   } finally {
@@ -253,4 +323,5 @@ new ResizeObserver(() => { if (observation) chart(observation); }).observe(el("p
 new ResizeObserver(() => { if (observation) progressStrip(100 * observation.modules / observation.total); }).observe(el("progressbar"));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 refresh();
+setInterval(stageClocks, 1000);
 setInterval(refresh, externalFeed ? 30000 : 15000);

@@ -7,8 +7,8 @@
   <meta name="theme-color" content="#0a0e14">
   <title>RH / GRH verification · Proof Monitor</title>
   <link rel="icon" href="./mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./terminal.css">
-  <script src="./terminal.js" defer></script>
+  <link rel="stylesheet" href="./terminal.css?v=dfd13ca6c8">
+  <script src="./terminal.js?v=2649c209be" defer></script>
 </head>
 <body>
   <header class="mast">
@@ -43,6 +43,12 @@
         <div class="chart-times"><span id="first-time">—</span><span>UTC</span><span id="last-time">—</span></div>
       </div>
     </section>
+    <dl class="stage-clock frame" aria-label="Current verification stage timing">
+      <div><dt>Current stage</dt><dd id="clock-stage">—</dd></div>
+      <div><dt>Stage elapsed</dt><dd id="clock-elapsed">—</dd></div>
+      <div class="clock-eta"><dt>Estimated stage finish · UTC</dt><dd id="clock-finish">—</dd><small id="clock-basis"></small></div>
+      <div><dt>Run elapsed</dt><dd id="clock-run">—</dd></div>
+    </dl>
     <section id="workers" class="subsection" aria-labelledby="workers-title">
       <div class="section-head"><h2 id="workers-title">Worker pool</h2><span class="section-detail" id="online">—</span></div>
       <div class="worker-grid" id="worker-grid"></div>
@@ -57,7 +63,6 @@
       <div class="frame lower">
         <div class="panel-title"><span class="sig cyan" aria-hidden="true">&gt;_</span><h2>Sample log</h2></div>
         <table><caption class="sr-only">Recent build samples</caption><thead><tr><th scope="col">UTC</th><th scope="col">Modules</th><th scope="col">Gain</th></tr></thead><tbody id="sample-log"></tbody></table>
-        <p class="footnote" id="estimate"></p>
       </div>
     </section>
     <details class="evidence frame"><summary>Run evidence <span aria-hidden="true">+</span></summary>
@@ -66,6 +71,6 @@
         <a href="https://alpo.ge/remark.pdf">Author’s announcement ↗</a><a href="https://github.com/Deicyde/riemann-hypothesis/blob/main/verification/NOTES.md">Verification setup ↗</a></div>
     </details>
   </main>
-  <footer class="shell"><span>PROOF MONITOR <span class="dim">/</span> LEAN 4</span><a id="feed-link" href="https://raw.githubusercontent.com/twinheterodox/rh-verification-monitor/telemetry/status.json">JSON feed ↗</a></footer>
+  <footer class="shell"><span>PROOF MONITOR <span class="dim">/</span> LEAN 4</span><a id="feed-link" data-api="https://api.github.com/repos/twinheterodox/rh-verification-monitor/contents/status.json?ref=telemetry" href="https://raw.githubusercontent.com/twinheterodox/rh-verification-monitor/telemetry/status.json">JSON feed ↗</a></footer>
 </body>
 </html>
