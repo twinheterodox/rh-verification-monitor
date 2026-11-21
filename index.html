@@ -7,8 +7,8 @@
   <meta name="theme-color" content="#0a0e14">
   <title>RH / GRH verification · Proof Monitor</title>
   <link rel="icon" href="./mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./terminal.css?v=fe89f24578">
-  <script src="./terminal.js?v=702b277e1f" defer></script>
+  <link rel="stylesheet" href="./terminal.css?v=e4807129cb">
+  <script src="./terminal.js?v=a55c9d7c00" defer></script>
 </head>
 <body>
   <header class="mast">
@@ -26,21 +26,30 @@
     </div>
     <noscript>This monitor uses JavaScript to display live observations. Its current data is also available in the JSON feed below.</noscript>
     <div id="notice" class="notice" role="status" hidden></div>
-    <section class="hero frame" aria-label="Compilation overview">
+    <section class="hero frame" aria-labelledby="summary-title">
       <div class="summary">
-        <div class="panel-title"><span class="sig green" aria-hidden="true">//</span><h2>Compilation</h2></div>
-        <div class="metric"><strong id="percent">—</strong><span>%</span></div>
-        <p class="fraction"><b id="completed">—</b> / <span id="total">—</span> distinct modules<span id="remaining"></span></p>
+        <div class="panel-title"><span class="sig green" aria-hidden="true">//</span><h2 id="summary-title">Compilation</h2></div>
+        <div class="metric" id="compile-metric"><strong id="percent">—</strong><span>%</span></div>
+        <div id="stage-metric" hidden>
+          <div class="metric"><strong id="stage-value">—</strong><span id="stage-unit"></span></div>
+          <p id="stage-detail"></p>
+        </div>
+        <p class="fraction"><b id="completed">—</b> / <span id="total">—</span> modules compiled<span id="remaining"></span></p>
         <div class="progress-strip" id="progressbar" role="progressbar" aria-label="Modules compiled" aria-valuemin="0" aria-valuemax="100"><span id="progress-fg"></span><span id="progress-bg"></span></div>
-        <div class="stat-pair"><div><span class="label">LATEST RATE</span><strong id="rate">—</strong><small>modules / min</small></div>
+        <div class="stat-pair" id="compile-stats"><div><span class="label">LATEST RATE</span><strong id="rate">—</strong><small>modules / min</small></div>
           <div><span class="label">CACHE REUSES</span><strong id="restores">—</strong><small>local builds avoided</small></div></div>
       </div>
       <div class="chart-panel">
-        <div class="chart-head"><div class="panel-title"><span class="sig cyan" aria-hidden="true">~/</span><h2>Build history</h2></div>
-          <div class="switch" role="group" aria-label="Chart metric"><button type="button" data-mode="modules" aria-pressed="true">Modules</button><button type="button" data-mode="rate" aria-pressed="false">Rate</button></div></div>
+        <div class="chart-head"><div class="panel-title"><span class="sig cyan" aria-hidden="true">~/</span><h2 id="chart-heading">Build history</h2></div>
+          <div class="switch" role="group" aria-label="History and checker views"><button type="button" data-mode="modules" aria-pressed="true">Modules</button><button type="button" data-mode="rate" aria-pressed="false">Rate</button><button type="button" data-mode="export" aria-pressed="false" hidden>Export</button><button type="button" data-mode="checkers" aria-pressed="false" hidden>Checkers</button></div></div>
+        <div id="history-view">
         <div class="plot-label"><span id="chart-unit">DISTINCT MODULES</span><span id="chart-latest">—</span></div>
         <div class="plot" id="plot" role="img" aria-label="Build history chart"><pre id="chart">Waiting for a sample…</pre></div>
         <div class="chart-times"><span id="first-time">—</span><span>UTC</span><span id="last-time">—</span></div>
+        </div>
+        <div id="checker-view" hidden>
+          <table class="checks-table"><caption class="sr-only">Recorded proof-checker activity by replay pass</caption><thead><tr><th scope="col">Pass</th><th scope="col">Checker</th><th scope="col">Status</th><th scope="col">Elapsed</th></tr></thead><tbody id="checker-rows"></tbody></table>
+        </div>
       </div>
     </section>
     <dl class="stage-clock frame" aria-label="Current verification stage timing">
@@ -62,12 +71,12 @@
       </div>
       <div class="frame lower">
         <div class="panel-title"><span class="sig cyan" aria-hidden="true">&gt;_</span><h2>Sample log</h2></div>
-        <table><caption class="sr-only">Recent build samples</caption><thead><tr><th scope="col">UTC</th><th scope="col">Modules</th><th scope="col">Gain</th></tr></thead><tbody id="sample-log"></tbody></table>
+        <table><caption class="sr-only">Recent observations</caption><thead><tr><th scope="col">UTC</th><th scope="col" id="sample-metric">Modules</th><th scope="col" id="sample-change">Gain</th></tr></thead><tbody id="sample-log"></tbody></table>
       </div>
     </section>
     <details class="evidence frame"><summary>Run evidence <span aria-hidden="true">+</span></summary>
       <div class="detail-body"><p>The submitted archive and clean challenge statements were fingerprinted before compilation. The proof builds with Lean 4.33.1 and the judge runs Lean 4.36.0.</p>
-        <dl><dt>Source archive · SHA-256</dt><dd id="archive">—</dd><dt>Clean challenge · SHA-256</dt><dd id="challenge">—</dd></dl>
+        <dl><dt>Source archive · SHA-256</dt><dd id="archive">—</dd><dt>Clean challenge · SHA-256</dt><dd id="challenge">—</dd><dt>Final proof export · bytes</dt><dd id="export-size">Awaiting export</dd><dt>Final proof export · SHA-256</dt><dd id="export-digest">Awaiting fingerprint</dd></dl>
         <a href="https://alpo.ge/remark.pdf">Author’s announcement ↗</a><a href="https://github.com/Deicyde/riemann-hypothesis/blob/main/verification/NOTES.md">Verification setup ↗</a></div>
     </details>
   </main>

@@ -7,6 +7,7 @@ const utc = (s) => new Date(s).toISOString().slice(11, 19);
 const gib = (n) => Number.isFinite(n) ? fmt(n / 2 ** 30, 1) + " GiB" : "—";
 let observation;
 let chartMode = "modules";
+let lastPhase;
 let unavailable = false;
 let requestPending = false;
 const feedUrl = new URL(el("feed-link").href);
@@ -25,11 +26,12 @@ function node(tag, text, cls) {
 
 function freshness() {
   const s = observation;
-  const stale = s && !s.complete && Date.now() - Date.parse(s.sample) > 2.25 * s.intervalSeconds * 1000;
+  const terminal = s && (s.complete || s.stages.includes("deferred") || s.stages.includes("inspect"));
+  const stale = s && !terminal && Date.now() - Date.parse(s.sample) > 2.25 * s.intervalSeconds * 1000;
   const warning = unavailable || (s && (s.partial || stale));
   const chip = el("feed");
   chip.className = "feed " + (warning ? "warn" : s ? "live" : "");
-  chip.lastElementChild.textContent = warning ? "Feed delayed" : !s ? "Connecting" : s.complete ? "Final sample" : "Live feed";
+  chip.lastElementChild.textContent = warning ? "Feed delayed" : !s ? "Connecting" : terminal ? "Final sample" : "Live feed";
   const notice = el("notice");
   notice.hidden = !warning;
   if (warning) {
@@ -99,13 +101,48 @@ function workers(s) {
   el("online").textContent = online + " / " + s.workers.length + " ONLINE";
 }
 
+const checkerStates = {queued:"Queued", running:"Running", accepted:"Accepted", rejected:"Rejected",
+  error:"Execution error", deferred:"Deferred for RAM", stopped:"Stopped", covered:"Covered in core", "not run":"Did not run"};
+
+function showCheckers(s) {
+  const rows = (s.checkers || []).map(check => {
+    const row = node("tr", undefined, "checker-" + check.state.replaceAll(" ", "-"));
+    const elapsed = node("td", "—");
+    if (check.started && (check.ended || check.state === "running")) {
+      elapsed.dataset.start = check.started;
+      if (check.ended) elapsed.dataset.end = check.ended;
+      elapsed.dataset.approx = String(check.observedStart || Boolean(check.ended));
+      elapsed.title = check.observedStart ? "Timed from the first observation of this checker." :
+        check.ended ? "The end time was observed at the next sample." : "Timed from process start.";
+    }
+    row.append(node("td", check.pass === "core" ? "Core" : "Full"), node("td", check.name),
+      node("td", checkerStates[check.state] || "Unknown"), elapsed);
+    return row;
+  });
+  el("checker-rows").replaceChildren(...rows);
+}
+
 function chart(s) {
-  const points = s.history;
+  const checking = chartMode === "checkers";
+  const exporting = chartMode === "export";
+  el("history-view").hidden = checking;
+  el("checker-view").hidden = !checking;
+  el("chart-heading").textContent = checking ? "Proof checkers" : exporting ? "Export history" : "Build history";
+  for (const button of document.querySelectorAll("[data-mode]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.mode === chartMode));
+  }
+  if (checking) {
+    showCheckers(s);
+    stageClocks();
+    return;
+  }
+  const points = exporting ? s.history.filter(p => Number.isFinite(p.exportBytes))
+    .map(p => ({...p, export:p.exportBytes / 2 ** 30})) : s.history;
   if (!points.length) return;
   const prop = chartMode;
   const values = points.map(p => p[prop]).filter(Number.isFinite);
-  el("chart-unit").textContent = prop === "modules" ? "DISTINCT MODULES" : "MODULES / MIN";
-  el("chart-latest").textContent = "LAST  " + fmt(points.at(-1)[prop], prop === "rate" ? 1 : 0);
+  el("chart-unit").textContent = exporting ? "EXPORTED · GiB" : prop === "modules" ? "DISTINCT MODULES" : "MODULES / MIN";
+  el("chart-latest").textContent = "LAST  " + fmt(points.at(-1)[prop], exporting ? 2 : prop === "rate" ? 1 : 0);
   const chart = el("chart");
   if (!values.length || points.length < 2) {
     chart.textContent = "Waiting for comparable samples…";
@@ -134,7 +171,7 @@ function chart(s) {
   for (let y = rows - 1; y >= 0; y--) {
     const axis = y === rows - 1 || y === 4 || y === 0;
     const axisValue = y * ceil / (rows - 1);
-    const tag = axisValue >= 1000 ? fmt(axisValue / 1000, 1) + "k" : fmt(axisValue);
+    const tag = axisValue >= 1000 ? fmt(axisValue / 1000, 1) + "k" : fmt(axisValue, exporting ? 1 : 0);
     frag.append(node("span", (axis ? tag : "").padStart(5) + " |", "axis"));
     let previousClass = "", run = "";
     const flush = () => { if (run) frag.append(node("span", run, previousClass)); };
@@ -174,12 +211,37 @@ function stages(s) {
 }
 
 function sampleLog(s) {
+  if (s.stages[1] === "done" && s.checkers?.length) {
+    el("sample-metric").textContent = "Checker";
+    el("sample-change").textContent = "Event";
+    const events = [];
+    for (const check of s.checkers) {
+      const label = check.name + " · " + check.pass;
+      if (check.started) events.push([check.started, label, "Running"]);
+      if (check.ended) events.push([check.ended, label, checkerStates[check.state]]);
+    }
+    const rows = events.sort((a,b) => b[0].localeCompare(a[0])).slice(0,5).map(([time, name, event]) => {
+      const row = node("tr");
+      row.append(node("td", utc(time)), node("td", name), node("td", event));
+      return row;
+    });
+    if (!rows.length) {
+      const row = node("tr"), message = node("td", "Awaiting the first checker observation.");
+      message.colSpan = 3; row.append(message); rows.push(row);
+    }
+    el("sample-log").replaceChildren(...rows);
+    return;
+  }
+  const exporting = Boolean(s.export?.bytes) && s.stages[0] === "done";
+  el("sample-metric").textContent = exporting ? "Export · GiB" : "Modules";
+  el("sample-change").textContent = exporting ? "Write · MiB/s" : "Gain";
   const rows = [];
   for (let i = s.history.length - 1; i >= Math.max(0, s.history.length - 5); i--) {
     const p = s.history[i], prev = s.history[i - 1];
     const gain = prev && p.rate !== null ? "+" + fmt(p.modules - prev.modules) : "—";
     const row = node("tr");
-    row.append(node("td", utc(p.time)), node("td", fmt(p.modules)), node("td", gain));
+    row.append(node("td", utc(p.time)), node("td", exporting ? fmt(p.exportBytes / 2 ** 30, 2) : fmt(p.modules)),
+      node("td", exporting ? fmt(Number.isFinite(p.exportRate) ? p.exportRate / 2 ** 20 : null, 1) : gain));
     rows.push(row);
   }
   el("sample-log").replaceChildren(...rows);
@@ -211,6 +273,10 @@ function stageClocks() {
   const stopped = Boolean(timing.ended) || s.stages.some(x => x === "inspect" || x === "deferred") || s.complete;
   const end = timing.ended ? Date.parse(timing.ended) : delayed || stopped ? sample : now;
   const active = s.stages.indexOf("active");
+  for (const timer of document.querySelectorAll("#checker-rows [data-start]")) {
+    timer.textContent = (timer.dataset.approx === "true" ? "≈" : "") +
+      stopwatch(timer.dataset.start, timer.dataset.end ? Date.parse(timer.dataset.end) : end);
+  }
   el("clock-stage").textContent = active >= 0 ? ["Compilation","Proof export","Core replay","Additional checks"][active] : s.headline;
   el("clock-elapsed").textContent = stopwatch(timing.stageStarted,end);
   el("clock-run").textContent = stopwatch(timing.runStarted,end);
@@ -231,10 +297,58 @@ function stageClocks() {
     finish.textContent = utcFinish.format(minute);
     finish.title = new Date(minute).toLocaleString(undefined, {dateStyle:"medium", timeStyle:"short"}) + " in your time zone";
     basis.textContent = "~" + Math.floor(minutes / 60) + "h " + minutes % 60 + "m left · " + eta.window + "-min pace";
+  } else if (active === 1) {
+    finish.textContent = "—";
+    basis.textContent = s.export?.state === "hashing" ? "Fingerprinting the completed file." : "Final export size is unknown.";
   } else {
     finish.textContent = active === 0 ? "Estimating…" : "No estimate yet";
     basis.textContent = active === 0 ? "Awaiting a measurable build rate." : "This stage has no measured work total.";
   }
+}
+
+function stageOverview(s) {
+  const phase = s.stages[0] !== "done" ? "compile" : s.stages[1] !== "done" ? "export" : "replay";
+  const compiling = phase === "compile";
+  const hasExport = s.history.some(point => Number.isFinite(point.exportBytes));
+  const hasChecks = Boolean(s.checkers?.length) && !compiling;
+  const viewKey = phase + (phase === "replay" ? hasChecks : phase === "export" ? hasExport : "");
+  document.querySelector('[data-mode="export"]').hidden = !hasExport;
+  document.querySelector('[data-mode="checkers"]').hidden = !hasChecks;
+  if (lastPhase !== viewKey) {
+    chartMode = phase === "replay" && hasChecks ? "checkers" : !compiling && hasExport ? "export" : "modules";
+    lastPhase = viewKey;
+  }
+  el("compile-metric").hidden = !compiling;
+  el("compile-stats").hidden = !compiling;
+  el("progressbar").hidden = !compiling;
+  el("stage-metric").hidden = compiling;
+  if (compiling) {
+    el("summary-title").textContent = "Compilation";
+    return;
+  }
+  const title = el("summary-title"), value = el("stage-value"), unit = el("stage-unit"), detail = el("stage-detail");
+  el("stage-metric").classList.toggle("named", phase === "replay");
+  if (phase === "export") {
+    const e = s.export || {};
+    title.textContent = s.headline;
+    value.textContent = Number.isFinite(e.bytes) ? fmt(e.bytes / 2 ** 30, 2) : "—";
+    unit.textContent = "GiB";
+    detail.textContent = e.state === "hashing" ? "Computing the final SHA-256." :
+      e.state === "stopped" ? "Export stopped." : Number.isFinite(e.bytesPerSecond)
+      ? fmt(e.bytesPerSecond / 2 ** 20, 1) + " MiB/s since the previous observation"
+      : "Waiting for a second export measurement.";
+    return;
+  }
+  const batch = s.stages[2] === "done" ? "full" : "core";
+  const group = (s.checkers || []).filter(c => c.pass === batch);
+  const active = group.filter(c => c.state === "running").map(c => c.name);
+  title.textContent = s.complete ? "Verification complete" : batch === "core" ? "Core proof replay" : "Full proof replay";
+  unit.textContent = "";
+  value.textContent = s.complete ? "Accepted" : s.stages.includes("deferred") ? "Deferred for RAM" :
+    s.stages.includes("inspect") ? "Needs inspection" : active.length ? active.join(" + ") : "Awaiting checker report";
+  const accepted = group.filter(c => c.state === "accepted").length;
+  detail.textContent = s.complete ? "All configured checks accepted the exported proof." : group.length
+    ? accepted + " of " + group.length + " checkers have recorded acceptance in this pass." : s.headline + ".";
 }
 
 function render(s) {
@@ -249,12 +363,16 @@ function render(s) {
   el("total").textContent = fmt(s.total);
   const remainingLabel = el("remaining");
   if (remainingLabel) remainingLabel.textContent = " · " + fmt(remaining) + " remaining";
-  progressStrip(s.modules, s.total);
+  stageOverview(s);
+  if (!el("progressbar").hidden) progressStrip(s.modules, s.total);
   el("rate").textContent = fmt(s.rate, 1);
   const hits = s.workers.map(w => w.restores);
   el("restores").textContent = hits.every(Number.isFinite) ? fmt(hits.reduce((a,b) => a + b, 0)) : "—";
   el("archive").textContent = s.archiveSha256 || "Awaiting matching receipts";
   el("challenge").textContent = s.challengeSha256 || "Awaiting receipt";
+  el("export-size").textContent = Number.isFinite(s.export?.finalBytes)
+    ? fmt(s.export.finalBytes) + " bytes (" + fmt(s.export.finalBytes / 2 ** 30, 2) + " GiB)" : "Awaiting final size";
+  el("export-digest").textContent = s.export?.sha256 || "Awaiting fingerprint";
   eta = compilationEstimate(s);
   workers(s); chart(s); stages(s); sampleLog(s); stageClocks();
 }
@@ -333,12 +451,11 @@ async function refresh() {
 for (const button of document.querySelectorAll("[data-mode]")) {
   button.addEventListener("click", () => {
     chartMode = button.dataset.mode;
-    for (const option of button.parentElement.children) option.setAttribute("aria-pressed", String(option === button));
     if (observation) chart(observation);
   });
 }
 new ResizeObserver(() => { if (observation) chart(observation); }).observe(el("plot"));
-new ResizeObserver(() => { if (observation) progressStrip(observation.modules, observation.total); }).observe(el("progressbar"));
+new ResizeObserver(() => { if (observation && !el("progressbar").hidden) progressStrip(observation.modules, observation.total); }).observe(el("progressbar"));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 refresh();
 setInterval(stageClocks, 1000);
