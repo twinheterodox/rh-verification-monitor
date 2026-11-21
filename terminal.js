@@ -239,14 +239,17 @@ function stageClocks() {
 
 function render(s) {
   const percent = s.modules * 100 / s.total;
+  const remaining = s.total - s.modules;
   el("stamp").textContent = utc(s.sample);
   el("stamp").dateTime = s.sample;
   el("stamp").title = s.sample;
   el("cadence").textContent = s.intervalSeconds === 60 ? "One-minute samples" : Math.round(s.intervalSeconds / 60) + "-minute samples";
-  el("percent").textContent = percent.toFixed(2);
+  el("percent").textContent = (remaining > 0 ? Math.min(99.99, percent) : percent).toFixed(2);
   el("completed").textContent = fmt(s.modules);
   el("total").textContent = fmt(s.total);
-  progressStrip(percent);
+  const remainingLabel = el("remaining");
+  if (remainingLabel) remainingLabel.textContent = " · " + fmt(remaining) + " remaining";
+  progressStrip(s.modules, s.total);
   el("rate").textContent = fmt(s.rate, 1);
   const hits = s.workers.map(w => w.restores);
   el("restores").textContent = hits.every(Number.isFinite) ? fmt(hits.reduce((a,b) => a + b, 0)) : "—";
@@ -256,17 +259,19 @@ function render(s) {
   workers(s); chart(s); stages(s); sampleLog(s); stageClocks();
 }
 
-function progressStrip(percent) {
+function progressStrip(modules, total) {
   const bar = el("progressbar");
   const style = getComputedStyle(bar);
   const context = document.createElement("canvas").getContext("2d");
   context.font = style.fontWeight + " " + style.fontSize + " " + style.fontFamily;
   const charWidth = context.measureText("#").width + (parseFloat(style.letterSpacing) || 0);
   const segments = Math.min(30, Math.max(5, Math.floor(bar.clientWidth / charWidth) - 3));
-  const filled = Math.round(Math.min(100, percent) * segments / 100);
+  const filled = Math.min(segments, Math.floor(segments * modules / total));
   el("progress-fg").textContent = "#".repeat(filled);
   el("progress-bg").textContent = "-".repeat(segments - filled);
-  bar.setAttribute("aria-valuenow", percent.toFixed(2));
+  bar.setAttribute("aria-valuemax", total);
+  bar.setAttribute("aria-valuenow", modules);
+  bar.setAttribute("aria-valuetext", fmt(modules) + " of " + fmt(total) + " modules compiled");
 }
 
 async function readFeed(url, headers = {}) {
@@ -333,7 +338,7 @@ for (const button of document.querySelectorAll("[data-mode]")) {
   });
 }
 new ResizeObserver(() => { if (observation) chart(observation); }).observe(el("plot"));
-new ResizeObserver(() => { if (observation) progressStrip(100 * observation.modules / observation.total); }).observe(el("progressbar"));
+new ResizeObserver(() => { if (observation) progressStrip(observation.modules, observation.total); }).observe(el("progressbar"));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 refresh();
 setInterval(stageClocks, 1000);
