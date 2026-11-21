@@ -322,6 +322,11 @@ function stageOverview(s) {
   el("compile-stats").hidden = !compiling;
   el("progressbar").hidden = !compiling;
   el("stage-metric").hidden = compiling;
+  const exported = s.export || {};
+  el("expression-stats").hidden = compiling || (phase !== "export" && !Number.isSafeInteger(exported.expressions));
+  el("expression-count").textContent = fmt(exported.expressions);
+  el("expression-rate-stat").hidden = phase !== "export" || exported.state !== "writing";
+  el("expression-rate").textContent = fmt(exported.expressionsPerSecond);
   if (compiling) {
     el("summary-title").textContent = "Compilation";
     return;

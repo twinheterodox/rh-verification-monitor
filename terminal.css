@@ -27,6 +27,8 @@ table{border-collapse:collapse;width:100%;margin-top:13px;font-size:12px}th,td{t
 #stage-metric .metric{margin-bottom:12px;flex-wrap:wrap}
 #stage-metric.named .metric strong{font:600 clamp(25px,3.4vw,46px)/1.15 var(--mono);letter-spacing:-.045em;overflow-wrap:anywhere}
 #stage-detail{margin:0;color:var(--sub);font:14px/1.5 var(--mono)}
+.expression-stats{display:flex;flex-wrap:wrap;gap:6px 24px;margin:12px 0;padding-top:10px;border-top:1px dashed var(--line)}
+.expression-stats dd{margin:1px 0 0;font:600 clamp(18px,2vw,23px)/1.25 var(--mono);letter-spacing:-.04em}
 .checks-table th,.checks-table td{font-size:13px;text-align:left;padding:5px 3px 5px 0}
 .checks-table th{font-size:11px}
 .checks-table td:last-child,.checks-table th:last-child{text-align:right;color:var(--sub);white-space:nowrap}

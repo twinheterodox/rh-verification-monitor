@@ -7,8 +7,8 @@
   <meta name="theme-color" content="#0a0e14">
   <title>RH / GRH verification · Proof Monitor</title>
   <link rel="icon" href="./mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./terminal.css?v=e4807129cb">
-  <script src="./terminal.js?v=a55c9d7c00" defer></script>
+  <link rel="stylesheet" href="./terminal.css?v=ccc65127d8">
+  <script src="./terminal.js?v=177ab95148" defer></script>
 </head>
 <body>
   <header class="mast">
@@ -33,6 +33,10 @@
         <div id="stage-metric" hidden>
           <div class="metric"><strong id="stage-value">—</strong><span id="stage-unit"></span></div>
           <p id="stage-detail"></p>
+          <dl class="expression-stats" id="expression-stats" hidden>
+            <div><dt class="label">EXPRESSIONS EXPORTED</dt><dd id="expression-count">—</dd></div>
+            <div id="expression-rate-stat"><dt class="label">EXPRESSIONS / SEC</dt><dd id="expression-rate">—</dd></div>
+          </dl>
         </div>
         <p class="fraction"><b id="completed">—</b> / <span id="total">—</span> modules compiled<span id="remaining"></span></p>
         <div class="progress-strip" id="progressbar" role="progressbar" aria-label="Modules compiled" aria-valuemin="0" aria-valuemax="100"><span id="progress-fg"></span><span id="progress-bg"></span></div>
