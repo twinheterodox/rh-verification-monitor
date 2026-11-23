@@ -26,7 +26,7 @@ function node(tag, text, cls) {
 
 function freshness() {
   const s = observation;
-  const terminal = s && (s.complete || s.stages.includes("deferred") || s.stages.includes("inspect"));
+  const terminal = s && (s.complete || s.stages.some(state => ["discontinued", "deferred", "inspect"].includes(state)));
   const stale = s && !terminal && Date.now() - Date.parse(s.sample) > 2.25 * s.intervalSeconds * 1000;
   const warning = unavailable || (s && (s.partial || stale));
   const chip = el("feed");
@@ -194,8 +194,8 @@ function chart(s) {
     " to " + utc(points.at(-1).time) + " UTC. Most recent value " + fmt(points.at(-1)[prop], 1) + ".");
 }
 
-const stageNames = ["Verifier controls", "Compile submitted modules", "Export the proof", "Replay Lean and nanoda", "Run additional kernel checks"];
-const stageGlyph = {done: "[x]", active: "[>]", queued: "[ ]", deferred: "[~]", inspect: "[!]", unknown: "[?]"};
+const stageNames = ["Verifier controls", "Compile submitted modules", "Export the proof", "Replay Lean and nanoda", "Additional kernel checks (optional)"];
+const stageGlyph = {done: "[x]", active: "[>]", queued: "[ ]", discontinued: "[-]", deferred: "[~]", inspect: "[!]", unknown: "[?]"};
 function stages(s) {
   const states = [s.controlsPassed ? "done" : "unknown", ...s.stages];
   el("stages").replaceChildren(...stageNames.map((name, i) => {
@@ -207,7 +207,7 @@ function stages(s) {
   }));
   el("phase-note").textContent = s.headline === "Compiling proof modules"
     ? "Compilation measures build progress. The exported proof is checked in the two replay stages."
-    : s.headline + ".";
+    : s.stages[3] === "discontinued" ? "Core checks passed. The optional Full pass was discontinued." : s.headline + ".";
 }
 
 function sampleLog(s) {
@@ -277,13 +277,14 @@ function stageClocks() {
     timer.textContent = (timer.dataset.approx === "true" ? "≈" : "") +
       stopwatch(timer.dataset.start, timer.dataset.end ? Date.parse(timer.dataset.end) : end);
   }
-  el("clock-stage").textContent = active >= 0 ? ["Compilation","Proof export","Core replay","Additional checks"][active] : s.headline;
+  el("clock-stage").textContent = active >= 0 ? ["Compilation","Proof export","Core replay","Additional checks"][active] :
+    s.stages[3] === "discontinued" ? "Full checks discontinued" : s.headline;
   el("clock-elapsed").textContent = stopwatch(timing.stageStarted,end);
   el("clock-run").textContent = stopwatch(timing.runStarted,end);
   const finish = el("clock-finish"), basis = el("clock-basis");
   finish.removeAttribute("title");
   if (stopped) {
-    finish.textContent = s.complete ? "Finished" : "—";
+    finish.textContent = s.complete || s.stages[3] === "discontinued" ? "Finished" : "—";
     basis.textContent = timing.ended ? utc(timing.ended) + " UTC · last stage update" : "";
   } else if (delayed) {
     finish.textContent = "Awaiting sample";
@@ -344,15 +345,20 @@ function stageOverview(s) {
       : "Waiting for a second export measurement.";
     return;
   }
-  const batch = s.stages[2] === "done" ? "full" : "core";
-  const group = (s.checkers || []).filter(c => c.pass === batch);
-  const active = group.filter(c => c.state === "running").map(c => c.name);
-  title.textContent = s.complete ? "Verification complete" : batch === "core" ? "Core proof replay" : "Full proof replay";
   unit.textContent = "";
-  value.textContent = s.complete ? "Accepted" : s.stages.includes("deferred") ? "Deferred for RAM" :
+  if (s.verified ?? (s.stages[2] === "done")) {
+    title.textContent = "Core checks passed";
+    value.textContent = "Verified";
+    detail.textContent = "Lean’s default kernel and nanoda accepted the formal proof of all five challenge statements under the three permitted axioms.";
+    return;
+  }
+  const group = (s.checkers || []).filter(c => c.pass === "core");
+  const active = group.filter(c => c.state === "running").map(c => c.name);
+  title.textContent = "Core proof replay";
+  value.textContent = s.stages.includes("deferred") ? "Deferred for RAM" :
     s.stages.includes("inspect") ? "Needs inspection" : active.length ? active.join(" + ") : "Awaiting checker report";
   const accepted = group.filter(c => c.state === "accepted").length;
-  detail.textContent = s.complete ? "All configured checks accepted the exported proof." : group.length
+  detail.textContent = group.length
     ? accepted + " of " + group.length + " checkers have recorded acceptance in this pass." : s.headline + ".";
 }
 
@@ -436,7 +442,7 @@ async function fetchLatest() {
 }
 
 async function refresh() {
-  if (requestPending) return;
+  if (requestPending || (observation?.stages[3] === "discontinued" && !observation.partial)) return;
   requestPending = true;
   try {
     const s = await fetchLatest();

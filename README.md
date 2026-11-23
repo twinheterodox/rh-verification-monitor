@@ -1,6 +1,6 @@
 # RH / GRH Verification
 
-The [live dashboard](https://twinheterodox.github.io/rh-verification-monitor/) follows an independent Lean check of Alpöge’s submission on the Riemann hypothesis and its Dirichlet generalization.
+The [dashboard](https://twinheterodox.github.io/rh-verification-monitor/) records the independent verification of Alpöge’s formal submission on the Riemann hypothesis and its Dirichlet generalization. Lean’s default kernel and nanoda both accepted the proof of the five challenge statements under the three permitted axioms. The optional Full pass was discontinued after Core passed. [Core verification receipt](verdict-core.json)
 
 The build monitor samples three workers every minute. Its main counter counts each submitted module once across the pool. The verification stages show proof export and kernel replay separately.
 
@@ -9,3 +9,5 @@ During export, the dashboard shows bytes written, the write rate between observa
 Stage and run clocks measure elapsed wall time from the recorded starts. During compilation, the estimated UTC finish projects the recent rate of distinct modules across the remaining inventory. Export and replay have no comparable work total.
 
 The `telemetry` branch holds the [latest observation](https://raw.githubusercontent.com/twinheterodox/rh-verification-monitor/telemetry/status.json) and dated snapshots under `samples/YYYYMMDD/HHMM.json` (UTC). The dashboard reads those public copies. Each worker’s availability and activity figures refer to the time printed on the page.
+
+In the final observation, `verified` records Core acceptance. The `complete` field records whether the optional Full pass also passed.
